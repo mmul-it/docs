@@ -1,0 +1,3 @@
+GitLab/*
+!GitLab/*.md
+!GitLab/*.png
