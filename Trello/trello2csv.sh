@@ -16,59 +16,73 @@ usage () {
 	echo "   If you pass a list to exclude, it will not be created in the csv"
 	echo
 }
-[ "$1" == "-h" ] && usage && exit 1
-[ $# -lt 2 ] && usage && exit 1
+[[ "$1" == "-h" ]] && usage && exit 1
+[[ $# -lt 2 ]] && usage && exit 1
 
-# Trello API
-TRELLO_KEY='PUT YOUR KEY HERE'
-TRELLO_TOKEN='PUT YOUR TOKEN HERE'
+# Trello API Key and Token are environment variables
+# source file (if exists)
+[[ -f 'trello2csv.env' ]] && source trello2csv.env
 
 TRELLO_USERNAME="$1"
 
-# Generic call to Trello API
+# Generic call to Trello API
 trello_api () {
 	ENDPOINT="$1"
 	FIELDS="$2"
 
-	http --pretty none -b https://api.trello.com/1${ENDPOINT} key==${TRELLO_KEY} token==${TRELLO_TOKEN} fields==${FIELDS}
+	curl -sG "https://api.trello.com/1${ENDPOINT}" \
+	-d key="${TRELLO_KEY}" \
+	-d token="${TRELLO_TOKEN}" \
+	-d fields="${FIELDS}"
 }
 
-# Obtain the board ID
-BOARD_NAME="$2"
-BOARD_ID="$(trello_api "/members/${TRELLO_USERNAME}/boards" id,name | jq -r '.[] | [ .id, .name ] | @csv' | sed -e s/\"//g | grep "${BOARD_NAME}" | awk -F',' '{print $1}')"
-[ ${#BOARD_ID} -eq 0 ] && echo "Cannot find board named $BOARD_NAME" && exit 1
+# Separator used in jq output
+# (avoid anything that could be used in card title
+# as ',', ';', '|', '-', '~')
+jq_sep="¬"
 
-# Set \n as a field separator
-IFS="
-"
+# Obtain the board ID
+BOARD_NAME="${2}"
+BOARD_ID="$(
+	trello_api "/members/${TRELLO_USERNAME}/boards" "id,name" \
+	| jq -r ".[] | .id+\"${jq_sep}\"+.name" \
+	| awk -F"${jq_sep}" "\$2 == \"${BOARD_NAME}\" {print \$1}"
+)"
+[[ -z "${BOARD_ID}" ]] && echo "Cannot find board named ${BOARD_NAME}" && exit 1
 
 # Print csv header
-echo "Status;Title;Worked By;Due Date"
+echo "Status;Title;Worked By;Due Date;Last Activity Date"
 
 # Obtain list in boards
-for LIST in $(trello_api "/boards/${BOARD_ID}/lists" id,name | jq -r '.[] | [ .id, .name ] | @csv' | sed -e s/\"//g); do
-	# Extract list ID and name
-	LIST_ID="$(echo $LIST | cut -d',' -f1)"
-	LIST_NAME="$(echo $LIST | cut -d',' -f2)"
-
+while IFS="${jq_sep}" read -r LIST_ID LIST_NAME
+do
 	# If requested, skip this list
-	[ ${#3} -ne 0 ] && [ "${3}" == "${LIST_NAME}" ] && continue
+	[[ -n "${3}" ]] && [[ "${3}" == "${LIST_NAME}" ]] && continue
 
 	# Obtain cards in list
-	for CARD in $(trello_api "/lists/${LIST_ID}/cards" id,name,due | jq -r '.[] | [ .id, .name, .due ] | @csv' | sed -e s/\"//g); do
-		# Extract card ID, Name and Due Date
-		CARD_ID="$(echo $CARD | cut -d',' -f1)"
-		CARD_NAME="$(echo $CARD | cut -d',' -f2)"
-		CARD_DUE="$(echo $CARD | cut -d',' -f3 | cut -d'T' -f1)"
-
+	# - Extract card ID, Name and Due Date
+	while IFS="${jq_sep}" read -r CARD_ID CARD_NAME CARD_DUE CARD_LAST_ACTIVITY
+	do
 		# Obtain card members
-		CARD_MEMBERS="$(trello_api "/cards/${CARD_ID}/members" fullName | jq -r '.[] | [.fullName] | @csv' | sed -e s/\"//g | tr '\n' ',' | sed -e s/,$//)"
+		CARD_MEMBERS="$(
+			trello_api "/cards/${CARD_ID}/members" "fullName" \
+			| jq -r '.[] | .fullName' \
+			| paste -sd','
+		)"
 
 		# Write the ouput, avoiding Due Date for the "Done" list
-		if [ "${LIST_NAME}" == "Done" ]; then
-			echo "${LIST_NAME};${CARD_NAME};${CARD_MEMBERS};"
+		if [[ "${LIST_NAME}" == "Done" ]]; then
+			echo "${LIST_NAME};${CARD_NAME};${CARD_MEMBERS};;${CARD_LAST_ACTIVITY%T*}"
 		else
-			echo "${LIST_NAME};${CARD_NAME};${CARD_MEMBERS};${CARD_DUE}"
+			echo "${LIST_NAME};${CARD_NAME};${CARD_MEMBERS};${CARD_DUE%T*};${CARD_LAST_ACTIVITY%T*}"
 		fi
-	done
-done
+	done < <(
+		trello_api "/lists/${LIST_ID}/cards" "id,name,due,dateLastActivity" \
+		| jq -r ".[] | .id+\"${jq_sep}\"+.name+\"${jq_sep}\"+.due+\"${jq_sep}\"+.dateLastActivity" \
+		| tr -d '"'
+	)
+done < <(
+	trello_api "/boards/${BOARD_ID}/lists" "id,name" \
+	| jq -r ".[] | .id+\"${jq_sep}\"+.name " \
+	| tr -d '"'
+)

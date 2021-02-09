@@ -7,22 +7,26 @@ or customers.
 It needs two software to work:
 
 * [jq](https://stedolan.github.io/jq/) - a JSON parser for the command line
-* [httpie](https://httpie.org) - a command line HTTP client with intuitive UI
+* [cURL](https://curl.se/) - the classic CLI HTTP client
 
-HTTPie can be easly replaced by curl if you prefer (look at the trello_api()
+cURL can be easly replaced by other CLI client (such [HTTPie](https://httpie.org)) if you prefer (look at the trello_api()
 function).
-
 ## Installation
 
 First of all, you need the Trello Key and Trello Token in order to perform API
 calls. Go to the [Trello Developer API Keys page](https://trello.com/app-key/)
-and follow the intructions. Once obtained the two values, edit trello2csv.sh and
+and follow the intructions.
+Once obtained the two values, edit `trello2csv.env` and
 replace the two lines:
 
-    TRELLO_KEY='PUT YOUR KEY HERE'
-    TRELLO_TOKEN='PUT YOUR TOKEN HERE'
+    export TRELLO_KEY='PUT YOUR KEY HERE'
+    export TRELLO_TOKEN='PUT YOUR TOKEN HERE'
 
 with the correct values.
+
+To keep pulling this repo without changes to `trello2csv.env`, set the file "as unchanged":
+
+    git update-index --assume-unchanged trello2csv.env
 
 ## Usage
 
@@ -44,9 +48,9 @@ application. The table will have the following columns:
 Here a usage example:
 
     $ ./trello2csv.sh mariorossi "My Customer"
-	Status;Title;Worked By;Due Date
-	Tech Debts;Ruolo nagios (funzionamento server-worker combinato);;
-	To Do;Rimozione di tutte le firme all'interno dei file di testo;Mario Rossi,Andrea Verdi;2020-08-20
+	Status;Title;Worked By;Due Date;Last Activity Date
+	Tech Debts;Ruolo nagios (funzionamento server-worker combinato);;;2020-07-17
+	To Do;Rimozione di tutte le firme all'interno dei file di testo;Mario Rossi,Andrea Verdi;2020-08-20;2020-08-18
 	...
 
 You can redirect the output in a CSV file and easly import in your favourite
