@@ -10,7 +10,7 @@
 # trello2csv.sh usage
 usage () {
 	cat <<-USAGE
-	usage: $0 <board_name> [list_to_exclude]
+	usage: $0 <board_name> [list_to_exclude] [other_list_to_exclude] [...]
 	
 	   You must specify the Trello board name
 	   If you pass a list to exclude, it will not be created in the csv
@@ -28,7 +28,8 @@ fi
 
 # Obtain the board ID
 BOARD_NAME="${1}"
-SKIP_LIST="${2}"
+shift
+EXCLUDE_LIST=( "${@}" )
 # Separator used in jq output
 # (avoid anything that could be used in card title
 # as ',', ';', '|', '-', '~')
@@ -63,8 +64,11 @@ trello_api "/boards/${BOARD_ID}/lists" "id,name" \
 	| while IFS="${jq_sep}" read -r LIST_ID LIST_NAME
 do
 	# If requested, skip this list
-	[[ -n "${SKIP_LIST}" && "${SKIP_LIST}" == "${LIST_NAME}" ]] && continue
-
+	for SKIP_LIST in "${EXCLUDE_LIST[@]}"
+	do
+		[[ "${SKIP_LIST}" == "${LIST_NAME}" ]] && continue 2
+	done
+	
 	# Obtain cards in list
 	# - Extract card ID, Name and Due Date
 	trello_api "/lists/${LIST_ID}/cards" "id,name,due,dateLastActivity" \
