@@ -55,7 +55,7 @@ BOARD_ID="$(
 [[ -z "${BOARD_ID}" ]] && echo "Cannot find board named ${BOARD_NAME}" && exit 1
 
 # Print csv header
-echo "Status;Title;Worked By;Due Date;Last Activity Date"
+echo "Status;Title;Worked By;Due Date;Last Activity Date;Label"
 
 # Obtain list in boards
 trello_api "/boards/${BOARD_ID}/lists" "id,name" \
@@ -83,11 +83,18 @@ do
 			| paste -sd','
 		)"
 
+		# Obtain card labels
+		CARD_LABELS="$(
+			trello_api "/cards/${CARD_ID}/labels" "all" \
+			| jq -r '.[] | .name' \
+			| paste -sd','
+		)"
+
 		# Write the ouput, avoiding Due Date for the "Done" list
 		if [[ "${LIST_NAME}" == "Done" ]]; then
-			echo "${LIST_NAME};${CARD_NAME};${CARD_MEMBERS};;${CARD_LAST_ACTIVITY%T*}"
+			echo "${LIST_NAME};${CARD_NAME};${CARD_MEMBERS};;${CARD_LAST_ACTIVITY%T*};;${CARD_LABELS}"
 		else
-			echo "${LIST_NAME};${CARD_NAME};${CARD_MEMBERS};${CARD_DUE%T*};${CARD_LAST_ACTIVITY%T*}"
+			echo "${LIST_NAME};${CARD_NAME};${CARD_MEMBERS};${CARD_DUE%T*};${CARD_LAST_ACTIVITY%T*};${CARD_LABELS}"
 		fi
 	done
 done
